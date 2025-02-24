@@ -30,7 +30,7 @@ class SecurityAuditAgent:
 
     graph.set_entry_point("start")
     
-    return graph.compile()  # Make sure to compile it
+    return graph.compile()  # Ensure the graph is compiled before use
 
     def task_planner(self, state: Dict):
         instruction = state.get("instruction", "")
