@@ -44,12 +44,12 @@ class SecurityAuditAgent:
 
    
     def run(self, instruction: str):
-    try:
-        result = self.graph.invoke({"instruction": instruction})
-        return result
-    except AttributeError as e:
-        logging.error(f"Graph execution failed: {e}")
-        return {"error": str(e)}
+        try:
+            result = self.graph.invoke({"instruction": instruction})
+            return result
+        except AttributeError as e:
+            logging.error(f"Graph execution failed: {e}")
+            return {"error": str(e)}
 
 
 
