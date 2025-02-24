@@ -1,5 +1,3 @@
-# agentic_cybersec_pipeline - Streamlit Deployment Version
-
 import os
 import logging
 import streamlit as st
@@ -12,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # Define state schema
 class AuditState(TypedDict):
-    instruction: Annotated[str, "input_key"]  # Prevent multiple updates
+    instruction: Annotated[str, "input_key"]  # Prevents duplicate values
     tasks: List[Dict]
     logs: List[str]
 
@@ -22,40 +20,42 @@ class SecurityAuditAgent:
         self.graph = self.build_graph()
 
     def build_graph(self):
-        graph = StateGraph(AuditState)  # Correct state graph definition
+        graph = StateGraph(AuditState)
         graph.add_node("start", self.task_planner)
         graph.add_node("execute", self.execute_task)
-        graph.add_node("done", lambda state: state)  # End node
+        graph.add_node("done", lambda state: state)  # Final state
 
-        graph.add_conditional_edges(
-            "start",
-            lambda state: "execute" if state["tasks"] else "done"
-        )
+        # **Termination condition**
+        def decide_next(state):
+            if state["tasks"]:  # Continue execution
+                return "execute"
+            return "done"  # Stop when no tasks remain
 
-        graph.add_edge("execute", "start")  # Loop until tasks are finished
-        graph.set_entry_point("start")  # Set entry point
+        graph.add_conditional_edges("start", decide_next)
+        graph.add_conditional_edges("execute", decide_next)  # Corrected transition
+        graph.set_entry_point("start")  
 
-        return graph.compile()
+        return graph.compile(config={"recursion_limit": 10})  # Explicit recursion limit
 
     def task_planner(self, state: AuditState):
-        """Generates tasks based on the instruction"""
-        if not state["tasks"]:  # Ensure tasks aren't appended multiple times
+        """Generate tasks only once"""
+        if not state["tasks"]:  
             task = {"tool": "nmap", "target": self.scope["domains"][0], "params": "-Pn -p 80,443"}
             logging.info(f"Task Planned: {task}")
-            state["tasks"] = [task]  # Set task list, don't append
+            state["tasks"] = [task]  
         return state
 
     def execute_task(self, state: AuditState):
-        """Executes tasks one by one"""
+        """Execute one task at a time"""
         if state["tasks"]:
-            task = state["tasks"].pop(0)  # Take one task at a time
+            task = state["tasks"].pop(0)  # Take and remove one task
             logging.info(f"Executing: {task}")
             output = f"Simulated output of {task['tool']} on {task['target']}"
             state["logs"].append(output)
         return state
 
     def run(self, instruction: str):
-        """Executes the LangGraph pipeline"""
+        """Run the LangGraph pipeline"""
         initial_state = {"instruction": instruction, "tasks": [], "logs": []}
         return self.graph.invoke(initial_state)
 
