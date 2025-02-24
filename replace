@@ -1,0 +1,2 @@
+def run(self, instruction: str):
+    return self.graph.invoke({"instruction": instruction})
