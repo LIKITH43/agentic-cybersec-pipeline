@@ -1,0 +1,13 @@
+cybersecurity-pipeline/
+├── .env
+├── README.md
+├── requirements.txt
+├── main.py
+├── app.py
+├── utils/
+│   ├── scope.py
+│   ├── tools.py
+│   ├── logging.py
+│   └── tasks.py
+└── tests/
+    └── test_scope.py
