@@ -43,8 +43,9 @@ class SecurityAuditAgent:
         return {"next": "start", "state": state}
 
     def run(self, instruction: str):
-        result = self.graph.walk({"instruction": instruction})
+        result = self.graph.invoke({"instruction": instruction})
         return result
+
 
 
 
