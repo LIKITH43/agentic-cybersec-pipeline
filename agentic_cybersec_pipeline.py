@@ -26,12 +26,12 @@ class SecurityAuditAgent:
         graph.add_node("done", lambda state: state)  # End node
 
         graph.add_edge("start", "execute")
-        graph.add_edge("execute", "start", condition=lambda state: bool(self.task_list))
-        graph.add_edge("execute", "done", condition=lambda state: not self.task_list)
+        graph.add_edge("execute", "start")
+        graph.add_edge("execute", "done")
 
         graph.set_entry_point("start")
     
-        return graph.compile()  # Ensure the graph is compiled before use
+        return graph()  # Ensure the graph is compiled before use
 
     def task_planner(self, state: Dict):
         instruction = state.get("instruction", "")
