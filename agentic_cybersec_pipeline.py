@@ -38,24 +38,27 @@ class SecurityAuditAgent:
         return graph.compile()  # No config argument needed
 
     def task_planner(self, state: AuditState):
-        """Generate multiple tasks"""
+        """Generate multiple tasks with IP addresses"""
         if not state["tasks"]:
-            # Define multiple tasks
+            # Define multiple tasks with IP addresses
             tasks = [
-                {"tool": "nmap", "target": self.scope["domains"][0], "params": "-Pn -p 80,443"},
-                {"tool": "nmap", "target": self.scope["domains"][0], "params": "-Pn -p 22,21"},
-                {"tool": "nmap", "target": self.scope["domains"][0], "params": "-Pn -p 8080"},
+                {"tool": "nmap", "target": self.scope["domains"][0], "ip": "192.168.1.1", "params": "-Pn -p 80,443"},
+                {"tool": "nmap", "target": self.scope["domains"][0], "ip": "192.168.1.2", "params": "-Pn -p 22,21"},
+                {"tool": "nmap", "target": self.scope["domains"][0], "ip": "192.168.1.3", "params": "-Pn -p 8080"},
             ]
             logging.info(f"Tasks Planned: {tasks}")
             state["tasks"] = tasks  # Add all tasks to the state
         return state
 
     def execute_task(self, state: AuditState):
-        """Execute one task at a time"""
+        """Execute one task at a time and include IP address in the output"""
         if state["tasks"]:
             task = state["tasks"].pop(0)  # Take and remove one task
             logging.info(f"Executing: {task}")
-            output = f"Simulated output of {task['tool']} on {task['target']} with params {task['params']}"
+            output = (
+                f"Simulated output of {task['tool']} on {task['target']} "
+                f"(IP: {task['ip']}) with params {task['params']}"
+            )
             state["logs"].append(output)
         return state
 
