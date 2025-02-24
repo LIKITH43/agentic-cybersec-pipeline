@@ -176,4 +176,4 @@ st.title("Agentic Cybersecurity Pipeline")
 # Scope Configuration
 st.subheader("Scope Configuration")
 domain_input = st.text_input("Domains (comma-separated)", "google.com")
-ip_input = st.text_input("IPs (comma-separated)",
+ip_input = st.text_input("IPs (comma-separated)"),
