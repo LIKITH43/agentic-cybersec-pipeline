@@ -151,7 +151,8 @@ if st.sidebar.button("Start Scan"):
     st.subheader("Running Security Audit...")
     final_state = agent.run(f"Scan {domain} for open ports and discover directories")
 
-    for log in final_state["logs"]:
-        st.text_area("Log", log, height=200)
+    # Display logs with unique keys
+    for i, log in enumerate(final_state["logs"]):
+        st.text_area(f"Log {i + 1}", log, height=200, key=f"log_{i}")
 
 st.sidebar.text("Logs will appear below after execution.")
