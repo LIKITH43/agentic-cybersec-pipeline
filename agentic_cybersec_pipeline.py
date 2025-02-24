@@ -44,6 +44,7 @@ class SecurityAuditAgent:
 
     def run(self, instruction: str):
         result = self.graph.traverse({"instruction": instruction})
+        return result
 
 
 # Streamlit UI
