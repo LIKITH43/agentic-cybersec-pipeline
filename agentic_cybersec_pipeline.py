@@ -43,7 +43,9 @@ class SecurityAuditAgent:
         return {"next": "start", "state": state}
 
     def run(self, instruction: str):
-        return self.graph.run({"instruction": instruction})
+        result = self.graph.traverse({"instruction": instruction})
+return result
+
 
 # Streamlit UI
 st.title("Agentic Cybersecurity Pipeline")
