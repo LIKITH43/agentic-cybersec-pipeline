@@ -19,13 +19,18 @@ class SecurityAuditAgent:
         self.graph = self.build_graph()
 
     def build_graph(self):
-        graph = Graph()
-        graph.add_node("start", self.task_planner)
-        graph.add_node("execute", self.execute_task)
-        graph.add_edge("start", "execute")
-        graph.add_edge("execute", "start")  # Loop until all tasks are done
-        graph.set_entry_point("start")  # Correct way to set the entry point
-        return graph
+    graph = Graph()
+    graph.add_node("start", self.task_planner)
+    graph.add_node("execute", self.execute_task)
+    graph.add_node("done", lambda state: state)  # End node
+
+    graph.add_edge("start", "execute")
+    graph.add_edge("execute", "start", condition=lambda state: bool(self.task_list))
+    graph.add_edge("execute", "done", condition=lambda state: not self.task_list)
+
+    graph.set_entry_point("start")
+    
+    return graph.compile()  # Make sure to compile it
 
     def task_planner(self, state: Dict):
         instruction = state.get("instruction", "")
