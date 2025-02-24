@@ -5,14 +5,14 @@ import logging
 import streamlit as st
 from langchain_community.chat_models import ChatOpenAI
 from langgraph.graph import StateGraph
-from typing import Dict, List, TypedDict
+from typing import Dict, List, TypedDict, Annotated
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 # Define state schema
 class AuditState(TypedDict):
-    instruction: str
+    instruction: Annotated[str, "input_key"]  # Use Annotated key to prevent update errors
     tasks: List[Dict]
     logs: List[str]
 
