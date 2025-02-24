@@ -1,158 +1,199 @@
-import os
-import logging
-import subprocess
+# streamlit_app.py
 import streamlit as st
-from langgraph.graph import StateGraph
-from typing import Dict, List, TypedDict, Annotated
-from dotenv import load_dotenv
+import subprocess
 import time
-import random
+import logging
+import json
+from typing import List, Dict, Any
+
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolExecutor
+from langchain.agents import Tool
+from langchain_core.messages import BaseMessage
+from langchain_core.runnables import RunnableLambda
+from langchain_openai import ChatOpenAI
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Define state schema
-class AuditState(TypedDict):
-    instruction: Annotated[str, "input_key"]  # High-level instruction
-    tasks: List[Dict]  # List of tasks to execute
-    logs: List[str]  # Execution logs
-    scope: Dict[str, List[str]]  # User-defined scope
+# Initialize OpenAI model
+llm = ChatOpenAI(model="gpt-4-1106-preview")
 
-class SecurityAuditAgent:
-    def __init__(self, scope: Dict[str, List[str]]):
-        self.scope = scope
-        self.graph = self.build_graph()
+# Global scope (can be modified via Streamlit UI)
+global_scope = {
+    "domains": ["google.com"],
+    "ips": ["8.8.8.8"]
+}
 
-    def build_graph(self):
-        graph = StateGraph(AuditState)
-        graph.add_node("start", self.task_planner)
-        graph.add_node("execute", self.execute_task)
-        graph.add_node("done", lambda state: state)  # Final state
+# State definition
+class AgentState:
+    task: str = ""
+    task_list: List[Dict[str, Any]] = []
+    messages: List[BaseMessage] = []
+    scope: Dict[str, List[str]] = global_scope
+    results: Dict[str, str] = {}
+    retries: Dict[str, int] = {}
 
-        # **Termination condition**
-        def decide_next(state):
-            if state["tasks"]:  # Continue execution if tasks remain
-                return "execute"
-            return "done"  # Stop when no tasks remain
-
-        graph.add_conditional_edges("start", decide_next)
-        graph.add_conditional_edges("execute", decide_next)
-        graph.set_entry_point("start")
-
-        return graph.compile()
-
-    def task_planner(self, state: AuditState):
-        """Generate initial tasks based on the instruction"""
-        if not state["tasks"]:
-            instruction = state["instruction"]
-            if "scan" in instruction.lower() and "ports" in instruction.lower():
-                # Add nmap task
-                state["tasks"].append({
-                    "tool": "nmap",
-                    "target": self.scope["domains"][0],
-                    "params": "-Pn -p 80,443,22,8080",
-                })
-            if "discover directories" in instruction.lower():
-                # Add gobuster task
-                state["tasks"].append({
-                    "tool": "gobuster",
-                    "target": self.scope["domains"][0],
-                    "params": "dir -u http://{target} -w /usr/share/wordlists/dirb/common.txt",
-                })
-            logging.info(f"Tasks Planned: {state['tasks']}")
-        return state
-
-    def execute_task(self, state: AuditState):
-        """Execute one task at a time"""
-        if state["tasks"]:
-            task = state["tasks"].pop(0)  # Take and remove one task
-            logging.info(f"Executing: {task}")
-            try:
-                output = self.run_tool(task)
-                state["logs"].append(output)
-                # Dynamically add new tasks based on output
-                if task["tool"] == "nmap":
-                    # Example: Add gobuster task if HTTP ports are open
-                    if "80/tcp" in output or "443/tcp" in output:
-                        state["tasks"].append({
-                            "tool": "gobuster",
-                            "target": task["target"],
-                            "params": "dir -u http://{target} -w /usr/share/wordlists/dirb/common.txt",
-                        })
-            except Exception as e:
-                logging.error(f"Task failed: {e}")
-                state["logs"].append(f"Task failed: {task} - {str(e)}")
-        return state
-
-    def run_tool(self, task: Dict):
-        """Simulate running a security tool and return realistic output"""
-        tool = task["tool"]
-        target = task["target"]
-        params = task["params"].format(target=target)
-        command = f"{tool} {params}"
+# Utility functions (same as in main.py)
+def run_command(command: List[str], scope: Dict[str, List[str]]) -> str:
+    # ... (same as in main.py)
+    try:
         logging.info(f"Running command: {command}")
 
-        # Simulate realistic output based on the tool
-        if tool == "nmap":
-            output = self.simulate_nmap(target)
-        elif tool == "gobuster":
-            output = self.simulate_gobuster(target)
+        # Check scope before execution
+        if not is_in_scope(command, scope):
+            return "Command execution blocked due to scope violation."
+
+        result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            logging.info(f"Command succeeded. Output: {result.stdout}")
+            return result.stdout
         else:
-            output = f"Simulated output for {tool} on {target} with params {params}"
+            logging.error(f"Command failed. Error: {result.stderr}")
+            return f"Command failed with error: {result.stderr}"
+    except subprocess.TimeoutExpired:
+        logging.error("Command timed out.")
+        return "Command timed out."
+    except Exception as e:
+        logging.exception(f"Error running command: {e}")
+        return f"Error: {e}"
+def is_in_scope(command: List[str], scope: Dict[str, List[str]]) -> bool:
+    # ... (same as in main.py)
+    for arg in command:
+        if any(domain in arg for domain in scope["domains"]):
+            return True
+        if any(ip in arg for ip in scope["ips"]):
+            return True
+    logging.warning(f"Command {command} is out of scope.")
+    return False
 
-        return output
+def parse_nmap_output(output: str) -> List[str]:
+    # ... (same as in main.py)
+    open_ports = []
+    for line in output.splitlines():
+        if "/tcp" in line and "open" in line:
+            port = line.split("/tcp")[0].strip()
+            open_ports.append(port)
+    return open_ports
 
-    def simulate_nmap(self, target: str):
-        """Simulate nmap output"""
-        output = [
-            f"Starting Nmap scan on {target}...",
-            "Scanning ports: 80, 443, 22, 8080",
-            "Discovered open ports:",
-            "80/tcp  - HTTP",
-            "443/tcp - HTTPS",
-            "22/tcp  - SSH",
-            "8080/tcp - HTTP-Alt",
-            "Nmap scan completed.",
-        ]
-        return "\n".join(output)
+def parse_gobuster_output(output: str) -> List[str]:
+    # ... (same as in main.py)
+    directories = []
+    for line in output.splitlines():
+        if "Status: 200" in line or "Status: 301" in line:
+            directory = line.split(" (Status:")[0].strip()
+            directories.append(directory)
+    return directories
 
-    def simulate_gobuster(self, target: str):
-        """Simulate gobuster output"""
-        output = [
-            f"Starting Gobuster scan on {target}...",
-            "Found directories:",
-            "/admin",
-            "/login",
-            "/images",
-            "/assets",
-            "Gobuster scan completed.",
-        ]
-        return "\n".join(output)
+# Tool definitions (same as in main.py)
+def nmap_scan(target: str) -> str:
+    # ... (same as in main.py)
+    command = ["nmap", target]
+    return run_command(command, global_scope)
 
-    def run(self, instruction: str):
-        """Run the LangGraph pipeline"""
-        initial_state = {"instruction": instruction, "tasks": [], "logs": [], "scope": self.scope}
-        return self.graph.invoke(initial_state)
+def gobuster_scan(target: str, wordlist: str = "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt") -> str:
+    # ... (same as in main.py)
+    command = ["gobuster", "dir", "-u", target, "-w", wordlist]
+    return run_command(command, global_scope)
 
-# Streamlit UI
-st.title("Agentic Cybersecurity Pipeline")
-st.sidebar.header("Define Scope")
+def ffuf_scan(target: str, wordlist: str = "/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt") -> str:
+    # ... (same as in main.py)
+    command = ["ffuf","-u", f"{target}/FUZZ", "-w", wordlist]
+    return run_command(command, global_scope)
 
-domain = st.sidebar.text_input("Target Domain", "google.com")
-ip_range = st.sidebar.text_input("IP Range", "192.168.1.0/24")
+def sqlmap_scan(target: str) -> str:
+    # ... (same as in main.py)
+    command = ["sqlmap", "-u", target]
+    return run_command(command, global_scope)
 
-if st.sidebar.button("Start Scan"):
-    scope = {"domains": [domain], "ips": [ip_range]}
-    agent = SecurityAuditAgent(scope)
-    
-    st.subheader("Running Security Audit...")
-    final_state = agent.run(f"Scan {domain} for open ports and discover directories")
+tools = [
+    Tool(
+        name="nmap_scan",
+        func=nmap_scan,
+        description="Run an nmap scan on a target.",
+    ),
+    Tool(
+        name="gobuster_scan",
+        func=gobuster_scan,
+        description="Run a gobuster scan on a target.",
+    ),
+     Tool(
+        name="ffuf_scan",
+        func=ffuf_scan,
+        description="Run a ffuf scan on a target.",
+    ),
+    Tool(
+        name="sqlmap_scan",
+        func=sqlmap_scan,
+        description="Run sqlmap on a target.",
+    )
+]
 
-    # Display logs with unique keys
-    for i, log in enumerate(final_state["logs"]):
-        st.text_area(f"Log {i + 1}", log, height=200, key=f"log_{i}")
+tool_executor = ToolExecutor(tools)
 
-st.sidebar.text("Logs will appear below after execution.")
+# Nodes (same as in main.py)
+def create_task_list(state: AgentState) -> AgentState:
+    # ... (same as in main.py)
+    prompt = f"Create a task list to accomplish the following: {state.task}. Return a list of tasks as a JSON array."
+    response = llm.invoke(prompt)
+    try:
+        task_list = eval(response.content)  # Evaluate the string to a list
+        state.task_list = task_list
+        logging.info(f"Task list created: {state.task_list}")
+    except Exception as e:
+        logging.error(f"Error parsing task list: {e}")
+        state.task_list = [{"task": "Error creating task list"}]
+    return state
+
+def execute_task(state: AgentState) -> AgentState:
+    # ... (same as in main.py)
+    if not state.task_list:
+        return state
+
+    current_task = state.task_list.pop(0)
+    task_name = current_task["task"]
+    tool_name = task_name.split(" ")[0].lower() + "_scan"
+
+    if tool_name in [tool.name for tool in tools]:
+        tool = next(tool for tool in tools if tool.name == tool_name)
+        arguments = {k: v for k, v in current_task.items() if k != "task"}
+        output = tool.func(**arguments)
+        state.results[task_name] = output
+        if "nmap" in tool_name:
+            open_ports = parse_nmap_output(output)
+            for port in open_ports:
+                state.task_list.append({"task": f"Run gobuster scan on google.com:{port}", "target": f"google.com:{port}"})
+        if "gobuster" in tool_name:
+            directories = parse_gobuster_output(output)
+            for directory in directories:
+                 state.task_list.append({"task": f"Run ffuf scan on google.com{directory}", "target": f"google.com{directory}"})
+
+        logging.info(f"Executed task: {task_name}. Result: {output}")
+    else:
+        state.results[task_name] = f"Tool {tool_name} not found."
+        logging.error(f"Tool {tool_name} not found.")
+
+    return state
+
+def check_task_list(state: AgentState) -> str:
+    # ... (same as in main.py)
+    if state.task_list:
+        return "execute_task"
+    else:
+        return "generate_report"
+
+def generate_report(state: AgentState) -> AgentState:
+    # ... (same as in main.py)
+    report = "Final Report:\n"
+    for task, result in state.results.items():
+        report += f"- Task: {task}\n  Result: {result}\n\n"
+    logging.info(f"Final report: {report}")
+    state.results["report"] = report
+    return state
+
+# Graph definition (same as in main.py)
+workflow = StateGraph(AgentState)
