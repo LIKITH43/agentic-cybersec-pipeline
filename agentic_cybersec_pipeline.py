@@ -43,8 +43,9 @@ class SecurityAuditAgent:
         return {"next": "start", "state": state}
 
     def run(self, instruction: str):
-        result = self.graph.traverse({"instruction": instruction})
+        result = self.graph.walk({"instruction": instruction})
         return result
+
 
 
 # Streamlit UI
