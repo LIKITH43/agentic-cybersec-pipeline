@@ -3,3 +3,8 @@ langchain
 langgraph
 langchain_community
 openai
+langgraph
+langchain
+python-dotenv
+streamlit
+pytest
